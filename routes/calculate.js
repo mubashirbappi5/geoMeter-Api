@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { getCoordinates } = require("../services/geocodeService");
 const { getDistance } = require("../services/distanceService");
+const Zone = require("../models/Zone");
 
 router.post("/calculate", async (req, res) => {
   try {
@@ -24,14 +25,43 @@ router.post("/calculate", async (req, res) => {
     );
 
     // STEP 3: pricing logic
-    let price = 2;
+    let price;
+    let pricingMethod = "default";
+    let zoneDetails = null;
 
-    if (distanceKm > 3) price = 5;
-    if (distanceKm > 10) price = 10;
+    // Check if the pickup coordinates fall inside any defined zone.
+    // MongoDB $geoIntersects expects GeoJSON Point: coordinates [longitude, latitude].
+    const pickupZone = await Zone.findOne({
+      boundary: {
+        $geoIntersects: {
+          $geometry: {
+            type: "Point",
+            coordinates: [parseFloat(fromCoord.lon), parseFloat(fromCoord.lat)]
+          }
+        }
+      }
+    });
+
+    if (pickupZone) {
+      pricingMethod = "zone-based";
+      zoneDetails = {
+        id: pickupZone._id,
+        name: pickupZone.name,
+        baseFare: pickupZone.baseFare,
+        perKmRate: pickupZone.perKmRate
+      };
+      price = pickupZone.baseFare + (distanceKm * pickupZone.perKmRate);
+    } else {
+      price = 2;
+      if (distanceKm > 3) price = 5;
+      if (distanceKm > 10) price = 10;
+    }
 
     res.json({
       distanceKm,
-      finalPrice: price,
+      finalPrice: Number(price.toFixed(2)),
+      pricingMethod,
+      zoneDetails,
       from: fromCoord,
       to: toCoord
     });

@@ -17,6 +17,7 @@ app.get('/', (req, res) => {
 });
 
 app.use("/api", require("./routes/calculate"));
+app.use("/api/zones", require("./routes/zones"));
 
 // Start Server
 const PORT = process.env.PORT || 5000;
